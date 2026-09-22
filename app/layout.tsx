@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
-const sans = Geist({
+// Self-hosted Geist fonts (from the `geist` npm package) so builds work
+// offline; next/font/google would fetch from Google at build time.
+const sans = localFont({
+  src: "../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2",
   variable: "--font-sans",
-  subsets: ["latin"],
-  weight: "variable",
+  weight: "100 900",
   display: "swap",
 });
 
-const mono = Geist_Mono({
+const mono = localFont({
+  src: "../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2",
   variable: "--font-mono",
-  subsets: ["latin"],
-  weight: "variable",
+  weight: "100 900",
   display: "swap",
 });
 
