@@ -1,7 +1,13 @@
 import { betterAuth } from "better-auth";
 
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
-const DEVELOPMENT_ALLOWED_HOSTS = ["localhost:*", "127.0.0.1:*"];
+const DEVELOPMENT_ALLOWED_HOSTS = [
+  "localhost:*",
+  "127.0.0.1:*",
+  // Sandboxed live-preview hosts (https://{port}-{sandbox}.e2b.app) proxy
+  // browser requests to the local dev server; trust them in development.
+  "*.e2b.app",
+];
 
 function getAllowedHosts(): string[] {
   if (process.env.NODE_ENV === "development") {
