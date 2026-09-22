@@ -22,6 +22,11 @@ pnpm dev
 Open http://localhost:3000 and chat with Sarath. The same server also exposes
 the agent API under `/eve/v1/*` (`/eve/v1/health` for a health check).
 
+No key yet? Just send any message: when the agent has no model credentials,
+the chat shows an inline **"Save API key"** form — paste your Vercel AI Gateway
+key there and retry. The key is applied to the running server immediately and
+persisted to `.env.local`.
+
 Other ways to run:
 
 ```bash

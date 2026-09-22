@@ -2,8 +2,8 @@
 
 import type { UserContent } from "ai";
 import { useEveAgent } from "eve/react";
-import { AlertCircleIcon, BrainIcon, PlusIcon, SquareIcon } from "lucide-react";
-import { useState } from "react";
+import { AlertCircleIcon, BrainIcon, CheckCircle2Icon, KeyIcon, PlusIcon, SquareIcon } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -68,7 +68,8 @@ export function AgentChat({
     isBusy &&
     (agent.status === "submitted" || lastMessage?.role !== "assistant" || isPendingAssistantShell);
   const turnFailure = isBusy || isResuming ? undefined : getLatestTurnFailure(agent.events);
-  const errorMessage = cancellationError ?? agent.error?.message ?? turnFailure;
+  const errorMessage = cancellationError ?? agent.error?.message ?? turnFailure?.message;
+  const needsApiKey = turnFailure?.needsApiKey ?? false;
   const hasConversationContent = sessionless || !isEmpty || errorMessage !== undefined;
   const showConversationLayout = isResuming || hasConversationContent;
   const activeSessionId = sessionId ?? agent.session?.sessionId;
@@ -163,7 +164,7 @@ export function AgentChat({
               ),
             )}
             {showPendingThinking ? <PendingThinking /> : null}
-            {errorMessage ? <ErrorMessage message={errorMessage} /> : null}
+            {errorMessage ? <ErrorMessage message={errorMessage} needsApiKey={needsApiKey} /> : null}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -218,7 +219,13 @@ function ComposerAction({
   );
 }
 
-function ErrorMessage({ message }: { readonly message: string }) {
+function ErrorMessage({
+  message,
+  needsApiKey = false,
+}: {
+  readonly message: string;
+  readonly needsApiKey?: boolean;
+}) {
   return (
     <Message className="max-w-full" from="assistant">
       <MessageContent>
@@ -227,13 +234,79 @@ function ErrorMessage({ message }: { readonly message: string }) {
           role="alert"
         >
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
-          <div>
+          <div className="w-full">
             <p className="font-medium">Request failed</p>
             <p className="mt-0.5 text-muted-foreground">{message}</p>
+            {needsApiKey ? <ApiKeyForm /> : null}
           </div>
         </div>
       </MessageContent>
     </Message>
+  );
+}
+
+function ApiKeyForm() {
+  const [apiKey, setApiKey] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string>();
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = apiKey.trim();
+    if (value.length === 0 || status === "saving") return;
+
+    setStatus("saving");
+    setError(undefined);
+    try {
+      const result = await postApiKey(value);
+      if (!result.ok) throw new Error(result.error ?? `Request failed (HTTP ${result.status}).`);
+      setStatus("saved");
+      setApiKey("");
+    } catch (failure) {
+      setStatus("error");
+      setError(toErrorMessage(failure));
+    }
+  };
+
+  if (status === "saved") {
+    return (
+      <div className="mt-2 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+        <CheckCircle2Icon className="size-4" />
+        <span>API key saved. Send your message again to continue.</span>
+      </div>
+    );
+  }
+
+  return (
+    <form className="mt-3 flex w-full flex-col gap-2" onSubmit={save}>
+      <p className="text-muted-foreground">
+        Add a Vercel AI Gateway API key to connect the model. Create one at{" "}
+        <a
+          className="underline underline-offset-2"
+          href="https://vercel.com/dashboard/ai/api-keys"
+          rel="noreferrer"
+          target="_blank"
+        >
+          vercel.com/dashboard/ai/api-keys
+        </a>
+        .
+      </p>
+      <div className="flex w-full flex-col gap-2 sm:flex-row">
+        <input
+          autoComplete="off"
+          className="h-9 w-full flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder="AI_GATEWAY_API_KEY"
+          type="password"
+          value={apiKey}
+        />
+        <Button disabled={status === "saving" || apiKey.trim().length === 0} size="sm" type="submit">
+          <KeyIcon className="size-3.5" />
+          {status === "saving" ? "Saving…" : "Save API key"}
+        </Button>
+      </div>
+      {status === "error" && error ? <p className="text-destructive">{error}</p> : null}
+    </form>
   );
 }
 
@@ -273,20 +346,59 @@ function PendingThinking() {
   );
 }
 
+type TurnFailure = { readonly message: string; readonly needsApiKey: boolean };
+
+const API_KEY_ROUTES = ["/eve/v1/api/key", "/api/key"] as const;
+
+async function postApiKey(
+  apiKey: string,
+): Promise<{ ok: boolean; error?: string; status: number }> {
+  for (const route of API_KEY_ROUTES) {
+    let response: Response;
+    try {
+      response = await fetch(route, {
+        body: JSON.stringify({ apiKey }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+    } catch {
+      continue;
+    }
+    if (response.status === 404) continue;
+
+    const body = (await response.json().catch(() => ({}))) as { error?: string; ok?: boolean };
+    return { error: body.error, ok: response.ok && body.ok === true, status: response.status };
+  }
+  return { error: "API key route was not found on this server.", ok: false, status: 404 };
+}
+
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unable to cancel the response.";
 }
 
 function getLatestTurnFailure(
   events: ReturnType<typeof useEveAgent>["events"],
-): string | undefined {
+): TurnFailure | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
 
     if (event.type === "turn.failed") {
-      return event.data.code === "MODEL_CALL_FAILED"
-        ? "The model is temporarily unavailable. Please try again."
-        : event.data.message;
+      if (event.data.code !== "MODEL_CALL_FAILED") {
+        return { message: event.data.message, needsApiKey: false };
+      }
+
+      const details = (event.data as { details?: { semanticErrorId?: string } }).details;
+      if (details?.semanticErrorId === "gateway-auth-missing-credentials") {
+        return {
+          message: "No model credentials are configured, so the agent cannot respond yet.",
+          needsApiKey: true,
+        };
+      }
+
+      return {
+        message: "The model is temporarily unavailable. Please try again.",
+        needsApiKey: false,
+      };
     }
 
     if (event.type === "turn.completed" || event.type === "turn.cancelled") {
