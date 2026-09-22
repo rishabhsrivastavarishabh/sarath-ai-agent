@@ -13,7 +13,9 @@ function getAllowedHosts(): string[] {
     process.env.VERCEL_PROJECT_PRODUCTION_URL,
   ].filter((host): host is string => Boolean(host));
   if (deploymentHosts.length === 0) {
-    throw new Error("No trusted deployment hosts are configured");
+    // Local/self-hosted runs outside Vercel: trust localhost only instead of
+    // failing, so `eve build`, `eve start`, and `next build` work on a laptop.
+    return DEVELOPMENT_ALLOWED_HOSTS;
   }
   return Array.from(new Set(deploymentHosts));
 }
@@ -22,6 +24,12 @@ function requireEnvironmentVariable(name: string): string {
   const value = process.env[name];
   if (value) return value;
   if (process.env.NODE_ENV === "development") return `development-${name}`;
+  // Off-Vercel local/self-hosted runs: fall back to a placeholder so builds
+  // and local servers work without secrets. Real deployments on Vercel always
+  // provide these variables and stay strict.
+  const onVercel =
+    process.env.VERCEL ?? process.env.VERCEL_URL ?? process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (!onVercel) return `local-${name}`;
   throw new Error(`Missing required environment variable: ${name}`);
 }
 

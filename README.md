@@ -1,8 +1,38 @@
 # sarath-ai
 
-This is an [eve](https://eve.dev) agent bootstrapped with [`eve init`](https://eve.dev/docs/reference/cli#eve-init).
+Sarath is a work assistant agent built on the [eve](https://eve.dev) framework: it drafts and polishes writing, summarizes documents and meetings, plans tasks, and keeps notes via a persistent local notepad tool.
 
-## Getting started
+## Run it locally
+
+Prerequisites: **Node.js 24+** and **pnpm** (`npm i -g pnpm`).
+
+```bash
+# 1. Install dependencies
+pnpm install
+
+# 2. Configure local secrets and model credentials
+cp env.example .env.local
+#    then set AI_GATEWAY_API_KEY in .env.local
+#    (create a key at https://vercel.com/dashboard/ai/api-keys)
+
+# 3. Start the agent + web chat
+pnpm dev
+```
+
+Open http://localhost:3000 and chat with Sarath. The same server also exposes
+the agent API under `/eve/v1/*` (`/eve/v1/health` for a health check).
+
+Other ways to run:
+
+```bash
+pnpm dev:eve          # eve dev: terminal UI (TUI) session
+pnpm build:eve        # compile the agent + host server into .output/
+PORT=3000 pnpm start:eve -- --host 0.0.0.0   # serve the built app
+```
+
+Work notepad entries persist under `.eve/data/` (git-ignored).
+
+## Getting started (authoring)
 
 First, run the development server:
 
